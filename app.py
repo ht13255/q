@@ -205,3 +205,4 @@ if st.button("선수 검색"):
             visualize_player_stats(player)
     else:
         st.write("조건에 맞는 선수가 없습니다.")
+
