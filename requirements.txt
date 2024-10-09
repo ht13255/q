@@ -1,9 +1,5 @@
 streamlit
-opencv-python-headless
-numpy
-pandas
-matplotlib
-seaborn
-moviepy
-boto3
+requests
+beautifulsoup4
 fpdf
+opencv-python-headless
