@@ -1,11 +1,11 @@
 import cv2
-import mediapipe as mp
+import streamlit as st
 import numpy as np
 import tempfile
 from fpdf import FPDF
-import streamlit as st
 
 # MediaPipe 포즈 추정 모델 불러오기
+import mediapipe as mp
 mp_pose = mp.solutions.pose
 pose = mp_pose.Pose()
 
@@ -24,6 +24,7 @@ def calculate_angle(a, b, c):
 def track_ball_trajectory(video_file_path):
     cap = cv2.VideoCapture(video_file_path)
     if not cap.isOpened():
+        st.error("비디오 파일을 열 수 없습니다.")
         return None, "비디오 파일을 열 수 없습니다."
 
     ball_trajectory = []
@@ -60,6 +61,7 @@ def track_ball_trajectory(video_file_path):
 def analyze_player_movements(video_file_path):
     cap = cv2.VideoCapture(video_file_path)
     if not cap.isOpened():
+        st.error("비디오 파일을 열 수 없습니다.")
         return None, "비디오 파일을 열 수 없습니다."
 
     frame_count = 0
