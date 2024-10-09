@@ -20,19 +20,14 @@ def get_fbref_stats(player_name):
     }
     return stats
 
-# 2. 영상 분석 함수 - OpenCV를 사용한 움직임 분석
-def analyze_video_for_movement(video_file, player_number):
-    # 파일을 임시 경로에 저장
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_file:
-        temp_file.write(video_file.read())  # 메모리에서 임시 파일로 쓰기
-        temp_file_path = temp_file.name
-    
+# 2. @st.cache 사용하여 캐싱된 영상 분석 함수 - OpenCV를 사용한 움직임 분석
+@st.cache
+def analyze_video_for_movement(video_file_path, player_number):
     # OpenCV로 임시 파일 열기
-    cap = cv2.VideoCapture(temp_file_path)
+    cap = cv2.VideoCapture(video_file_path)
     
     if not cap.isOpened():
-        st.error("비디오 파일을 열 수 없습니다. 형식이 올바른지 확인하세요.")
-        return None
+        return None, "비디오 파일을 열 수 없습니다."
 
     # 선수 움직임 추적을 위한 경로
     movement_path = []
@@ -43,9 +38,7 @@ def analyze_video_for_movement(video_file, player_number):
         if not ret:
             break
         
-        # 움직임 분석 예시: 특정 번호의 선수 추적 (가정: 선수 번호를 구분할 수 있는 방식으로)
-        # 이 코드는 실시간 객체 추적과 경로 저장을 포함합니다.
-        # 예시로서 흰색의 영역을 추적하는 코드입니다. 실제로는 선수 번호 인식 모델을 사용하여 개선 필요.
+        # 움직임 분석 예시: 특정 번호의 선수 추적
         gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         _, thresh_frame = cv2.threshold(gray_frame, 200, 255, cv2.THRESH_BINARY)
 
@@ -59,21 +52,21 @@ def analyze_video_for_movement(video_file, player_number):
     cap.release()
 
     # 추적된 경로 시각화
-    plt.figure(figsize=(6, 4))
     if movement_path:
+        plt.figure(figsize=(6, 4))
         x_coords, y_coords = zip(*movement_path)
         plt.plot(x_coords, y_coords, marker='o', color='blue', markersize=5)
         plt.title(f"선수 {player_number}의 움직임 경로")
         plt.xlabel("X 좌표")
         plt.ylabel("Y 좌표")
+        
+        # 이미지 파일로 저장
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmpfile:
+            plt.savefig(tmpfile.name)
+            plt.close()
+            return tmpfile.name, None
     else:
-        plt.title("움직임 경로를 감지하지 못했습니다.")
-    
-    # 움직임 경로를 이미지 파일로 저장
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmpfile:
-        plt.savefig(tmpfile.name)
-        plt.close()
-        return tmpfile.name
+        return None, "움직임 경로를 감지하지 못했습니다."
 
 # 3. PDF 보고서 생성 함수
 def generate_report(final_score, player_stats, video_analysis, movement_image_path):
@@ -95,8 +88,9 @@ def generate_report(final_score, player_stats, video_analysis, movement_image_pa
         pdf.cell(200, 10, txt=video_analysis, ln=True)
 
         # 선수 움직임 경로 이미지 추가
-        pdf.add_page()
-        pdf.image(movement_image_path, x=10, y=10, w=180)
+        if movement_image_path:
+            pdf.add_page()
+            pdf.image(movement_image_path, x=10, y=10, w=180)
 
         pdf_file_path = temp_file.name
         pdf.output(pdf_file_path)
@@ -126,11 +120,20 @@ def main():
         
         if video_file:
             player_number = st.number_input("분석할 선수 번호를 입력하세요", min_value=1, step=1)
+            
             if st.button("선수 번호로 분석"):
-                movement_image_path = analyze_video_for_movement(video_file, player_number)
-                if movement_image_path:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_video:
+                    temp_video.write(video_file.read())
+                    video_file_path = temp_video.name
+
+                # 캐시된 함수 사용
+                movement_image_path, error = analyze_video_for_movement(video_file_path, player_number)
+
+                if error:
+                    st.error(error)
+                elif movement_image_path:
                     st.image(movement_image_path, caption=f"선수 {player_number}의 움직임 경로")
-                    
+
                     # PDF 보고서 생성 및 다운로드
                     if st.button("PDF 보고서 생성 및 다운로드"):
                         video_analysis = f"선수 번호 {player_number}의 움직임이 분석되었습니다."
