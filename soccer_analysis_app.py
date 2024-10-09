@@ -94,7 +94,7 @@ def analyze_player_movements(video_file_path):
         if frame_count >= total_frames:
             break
 
-        # 프레임을 실시간으로 Streamlit에 출력
+        # Streamlit을 통해 프레임 출력
         st.image(frame, caption=f"처리된 프레임 {frame_count}/{total_frames}", use_column_width=True)
 
     cap.release()
@@ -149,7 +149,27 @@ def generate_analysis_report(profile_info, analysis_results, ball_analysis, fina
 
     return temp_file.name
 
-# 4. Streamlit 애플리케이션 UI 구성
+# 4. 비디오 처리 함수 - 비디오 프레임을 실시간으로 처리
+def process_video(video_file_path):
+    cap = cv2.VideoCapture(video_file_path)
+    if not cap.isOpened():
+        st.error("비디오 파일을 열 수 없습니다.")
+        return
+
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            break
+        
+        # 그레이스케일로 변환 (예시)
+        gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        
+        # Streamlit을 통해 프레임 출력
+        st.image(gray_frame, caption="처리된 프레임", use_column_width=True)
+
+    cap.release()
+
+# 5. Streamlit 애플리케이션 UI 구성
 def main():
     st.title("축구 선수 분석 애플리케이션")
 
@@ -184,6 +204,10 @@ def main():
         analysis_results, error = analyze_player_movements(video_file_path)
         if error:
             st.error(error)
+
+        # 비디오 프레임 실시간 처리
+        st.subheader("비디오 프레임 실시간 분석")
+        process_video(video_file_path)
 
         # 분석 보고서 생성
         if st.button("PDF 보고서 생성"):
