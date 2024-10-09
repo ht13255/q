@@ -4,4 +4,3 @@ beautifulsoup4
 fpdf
 opencv-python-headless
 matplotlib
-seaborn
