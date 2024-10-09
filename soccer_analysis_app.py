@@ -165,4 +165,13 @@ def main():
                     if error:
                         st.error(error)
                     elif movement_image_path:
-                        st.image(movement_image_path, caption=f"선
+                        st.image(movement_image_path, caption=f"선수 {player_number}의 움직임 경로")
+
+                        # 2단계: PDF 보고서 생성 및 다운로드
+                        if st.button("PDF 보고서 생성 및 다운로드"):
+                            video_analysis = f"선수 번호 {player_number}의 움직임이 분석되었습니다."
+                            pdf_file_path = generate_report(final_score, fbref_stats, video_analysis, movement_image_path)
+                            st.markdown(f'<a href="file://{pdf_file_path}" download>PDF 다운로드</a>', unsafe_allow_html=True)
+
+if __name__ == "__main__":
+    main()
