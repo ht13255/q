@@ -6,6 +6,7 @@ from fpdf import FPDF
 import requests
 from bs4 import BeautifulSoup
 import mediapipe as mp
+import time
 
 # Mediapipe 포즈 모델 초기화
 mp_pose = mp.solutions.pose
@@ -55,6 +56,9 @@ def analyze_video(video_file_path):
     frame_count = 0
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
+    # Streamlit 진행 바 설정
+    progress_bar = st.progress(0)
+    
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
@@ -77,7 +81,11 @@ def analyze_video(video_file_path):
             movement_path.append((landmarks[mp_pose.PoseLandmark.NOSE].x, landmarks[mp_pose.PoseLandmark.NOSE].y))
 
         frame_count += 1
-        st.image(frame, caption=f"프레임 {frame_count}/{total_frames}", use_column_width=True)
+        # 진행 상황 업데이트
+        progress_bar.progress(min(frame_count / total_frames, 1.0))
+        
+        # 중간에 잠깐 쉬기
+        time.sleep(0.01)
 
     cap.release()
 
@@ -125,13 +133,22 @@ def process_video_frames(video_file_path):
         st.error("비디오 파일을 열 수 없습니다.")
         return
 
+    frame_count = 0
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+    # 진행 바 설정
+    progress_bar = st.progress(0)
+
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
             break
         
+        # 그레이스케일 변환 (프레임은 화면에 보여주지 않음)
         gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        st.image(gray_frame, caption="그레이스케일 프레임", use_column_width=True)
+
+        frame_count += 1
+        progress_bar.progress(min(frame_count / total_frames, 1.0))
 
     cap.release()
 
@@ -173,8 +190,8 @@ def main():
         if error:
             st.error(error)
 
-        # 비디오 프레임 실시간 처리
-        st.subheader("비디오 프레임 실시간 분석")
+        # 비디오 프레임 실시간 처리 (프레임은 화면에 보여주지 않음)
+        st.subheader("비디오 프레임 처리 중...")
         process_video_frames(video_file_path)
 
         # PDF 보고서 생성 및 다운로드
