@@ -10,7 +10,7 @@ import mediapipe as mp
 mp_pose = mp.solutions.pose
 pose = mp_pose.Pose()
 
-# 1. FBref 크롤링 함수 - 고급 스탯 및 세부 움직임 분석 포함
+# 1. FBref 크롤링 함수
 def get_fbref_stats(player_name):
     url = f"https://fbref.com/en/search/search.fcgi?search={player_name}"
     response = requests.get(url)
