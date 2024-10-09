@@ -131,7 +131,7 @@ def generate_report(final_score, player_stats, video_analysis, movement_image_pa
 
 # 4. Streamlit UI 구성 - 작업을 단계별로 분리하여 처리
 def main():
-    st.title("축구 분석 애플리케이션")
+    st.title("스카우팅 리포트")
 
     st.header("선수 이름 검색")
     player_name = st.text_input("선수 이름을 입력하세요 (예: 홍길동)")
