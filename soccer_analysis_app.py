@@ -7,9 +7,27 @@ import seaborn as sns
 import moviepy.editor as mpy
 import boto3
 import base64
-from datetime import datetime
-from airflow import DAG
-from airflow.operators.python_operator import PythonOperator
+
+# 데이터 수집, 분석, 보고서 생성 함수 정의
+def collect_data():
+    st.write("데이터 수집 완료")
+
+def analyze_data():
+    st.write("데이터 분석 완료")
+
+def generate_report():
+    st.write("보고서 생성 완료")
+
+# 실행 파이프라인 함수
+def run_pipeline():
+    st.write("파이프라인 실행 중...")
+    collect_data()
+    analyze_data()
+    generate_report()
+
+# 파이프라인 실행 버튼
+if st.button("파이프라인 실행"):
+    run_pipeline()
 
 # 공유 기능 구현
 def create_shareable_download_link(file_path, file_type):
@@ -37,41 +55,6 @@ def collect_user_feedback():
         with open("user_feedback.txt", "a") as f:
             f.write(feedback + "\n")
         st.success("피드백이 제출되었습니다. 감사합니다!")
-
-# 클라우드 데이터베이스에 데이터 저장 (AWS DynamoDB 사용 예시)
-def upload_to_dynamodb(table_name, data):
-    dynamodb = boto3.resource('dynamodb')
-    table = dynamodb.Table(table_name)
-    response = table.put_item(Item=data)
-    return response
-
-# 데이터 파이프라인 자동화 (Airflow 사용 예시)
-def collect_data():
-    # 데이터 수집 코드
-    pass
-
-def analyze_data():
-    # 데이터 분석 코드
-    pass
-
-def generate_report():
-    # PDF 보고서 생성 코드
-    pass
-
-# Airflow DAG 정의
-default_args = {
-    'owner': 'airflow',
-    'start_date': datetime(2023, 1, 1),
-    'retries': 1
-}
-
-dag = DAG('soccer_analysis_pipeline', default_args=default_args, schedule_interval='@daily')
-
-t1 = PythonOperator(task_id='collect_data', python_callable=collect_data, dag=dag)
-t2 = PythonOperator(task_id='analyze_data', python_callable=analyze_data, dag=dag)
-t3 = PythonOperator(task_id='generate_report', python_callable=generate_report, dag=dag)
-
-t1 >> t2 >> t3
 
 # 예측 모델 성능 평가 대시보드
 def visualize_model_performance(training_history):
