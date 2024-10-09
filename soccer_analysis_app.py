@@ -40,7 +40,7 @@ def get_fbref_stats(player_name):
         st.error(f"데이터를 가져오는 중 오류가 발생했습니다: {e}")
         return None
 
-# 2. @st.cache 사용하여 캐싱된 영상 분석 함수 - OpenCV를 사용한 움직임 분석
+# 2. 비디오 분석 함수 - 프레임 간격을 설정하여 부하를 줄임
 @st.cache_data
 def analyze_video_for_movement(video_file_path, player_number, frame_step):
     # OpenCV로 임시 파일 열기
@@ -58,7 +58,7 @@ def analyze_video_for_movement(video_file_path, player_number, frame_step):
     # 진행 바 설정
     progress_bar = st.progress(0)
 
-    # 프레임마다 분석
+    # 프레임마다 분석 (프레임 간격 설정)
     for frame_num in range(0, total_frames, frame_step):
         cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)  # 특정 프레임으로 이동
         ret, frame = cap.read()
@@ -101,7 +101,7 @@ def analyze_video_for_movement(video_file_path, player_number, frame_step):
 # 3. PDF 보고서 생성 함수
 def generate_report(final_score, player_stats, video_analysis, movement_image_path):
     st.write("보고서 생성 중...")
-    
+
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
         pdf = FPDF()
         pdf.add_page()
@@ -165,14 +165,4 @@ def main():
                     if error:
                         st.error(error)
                     elif movement_image_path:
-                        st.image(movement_image_path, caption=f"선수 {player_number}의 움직임 경로")
-
-                        # 2단계: PDF 보고서 생성 및 다운로드
-                        if st.button("PDF 보고서 생성 및 다운로드"):
-                            video_analysis = f"선수 번호 {player_number}의 움직임이 분석되었습니다."
-                            pdf_file_path = generate_report(final_score, fbref_stats, video_analysis, movement_image_path)
-                            st.markdown(f'<a href="file://{pdf_file_path}" download>PDF 다운로드</a>', unsafe_allow_html=True)
-
-if __name__ == "__main__":
-    main()
-
+                        st.image(movement_image_path, caption=f"선
