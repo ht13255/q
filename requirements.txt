@@ -6,3 +6,4 @@ numpy
 Pillow
 requests
 beautifulsoup4
+pyvirtualdisplay
