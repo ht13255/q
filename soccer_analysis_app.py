@@ -1,3 +1,4 @@
+from pyvirtualdisplay import Display
 import cv2
 import streamlit as st
 import numpy as np
@@ -6,6 +7,10 @@ from fpdf import FPDF
 import requests
 from bs4 import BeautifulSoup
 import mediapipe as mp
+
+# 가상 디스플레이 생성
+display = Display(visible=0, size=(1024, 768))
+display.start()
 
 # Mediapipe 포즈 모델 초기화
 mp_pose = mp.solutions.pose
@@ -184,3 +189,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# 가상 디스플레이 종료
+display.stop()
