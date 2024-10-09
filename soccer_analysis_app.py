@@ -1,10 +1,4 @@
-from pyvirtualdisplay import Display
 import os
-
-# 가상 디스플레이 설정
-display = Display(visible=0, size=(1024, 768))
-display.start()
-
 import cv2
 import streamlit as st
 import numpy as np
@@ -14,6 +8,9 @@ import requests
 from bs4 import BeautifulSoup
 import mediapipe as mp
 import time
+
+# OpenCV가 OpenGL 대신 EGL을 사용하도록 설정 (필요시)
+os.environ["PYOPENGL_PLATFORM"] = "egl"
 
 # Mediapipe 포즈 모델 초기화
 mp_pose = mp.solutions.pose
@@ -208,6 +205,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-# 가상 디스플레이 종료
-display.stop()
