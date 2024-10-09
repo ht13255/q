@@ -7,6 +7,8 @@ import seaborn as sns
 import moviepy.editor as mpy
 import boto3
 import base64
+import tempfile
+from fpdf import FPDF
 
 # 데이터 수집, 분석, 보고서 생성 함수 정의
 def collect_data():
@@ -15,19 +17,34 @@ def collect_data():
 def analyze_data():
     st.write("데이터 분석 완료")
 
+# PDF 보고서 생성 함수
 def generate_report():
-    st.write("보고서 생성 완료")
+    st.write("보고서 생성 중...")
+    
+    # 임시 디렉터리에서 PDF 파일 생성
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Arial", size=12)
+        pdf.cell(200, 10, txt="축구 분석 보고서", ln=True, align='C')
+        pdf.cell(200, 10, txt="이 보고서는 자동으로 생성되었습니다.", ln=True)
+        
+        # PDF 파일 저장
+        pdf_file_path = temp_file.name
+        pdf.output(pdf_file_path)
+
+    st.success(f"PDF 보고서가 생성되었습니다: {pdf_file_path}")
+    
+    # PDF 파일 다운로드 링크 생성
+    return pdf_file_path
 
 # 실행 파이프라인 함수
 def run_pipeline():
     st.write("파이프라인 실행 중...")
     collect_data()
     analyze_data()
-    generate_report()
-
-# 파이프라인 실행 버튼
-if st.button("파이프라인 실행"):
-    run_pipeline()
+    pdf_file_path = generate_report()
+    return pdf_file_path
 
 # 공유 기능 구현
 def create_shareable_download_link(file_path, file_type):
@@ -107,13 +124,10 @@ def simulate_tactical_changes(player_positions, strategy):
 def main():
     st.title("축구 분석 애플리케이션")
 
-    # 1. 공유 기능 추가
-    st.header("분석 보고서 및 하이라이트 클립 공유")
-    pdf_file_path = "soccer_analysis_report.pdf"
-    st.markdown(create_shareable_download_link(pdf_file_path, "pdf"), unsafe_allow_html=True)
-    
-    highlight_clip_path = "highlight_clips.mp4"  # 가정된 파일 경로
-    st.markdown(create_shareable_download_link(highlight_clip_path, "video"), unsafe_allow_html=True)
+    # 1. 보고서 생성 및 다운로드 링크 제공
+    if st.button("보고서 생성 및 다운로드"):
+        pdf_file_path = run_pipeline()
+        st.markdown(create_shareable_download_link(pdf_file_path, "pdf"), unsafe_allow_html=True)
 
     # 2. 사용자 피드백 수집
     collect_user_feedback()
