@@ -1,7 +1,6 @@
 streamlit
-beautifulsoup4
-requests
+mediapipe
 opencv-python-headless
-matplotlib
 fpdf
 numpy
+Pillow
