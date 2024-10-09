@@ -45,7 +45,6 @@ def get_fbref_stats(player_name):
         "경기당 이동 거리(km)": "10.2", 
         "스프린트 횟수": "23",
         "경기 중 체력 유지 능력": "8.2",
-        # 돌파 방향과 주요 침투 구역은 영상 분석을 통해 처리
         "돌파 방향": "분석 중",
         "침투 성공률": "65",
         "주요 침투 구역": "분석 중"
@@ -94,6 +93,9 @@ def analyze_player_movements(video_file_path):
         frame_count += 1
         if frame_count >= total_frames:
             break
+
+        # 프레임을 실시간으로 Streamlit에 출력
+        st.image(frame, caption=f"처리된 프레임 {frame_count}/{total_frames}", use_column_width=True)
 
     cap.release()
 
