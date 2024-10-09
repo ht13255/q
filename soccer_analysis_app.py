@@ -4,6 +4,7 @@ import cv2
 import matplotlib.pyplot as plt
 from fpdf import FPDF
 import numpy as np
+import time
 
 # 1. FBref 크롤링 함수 - 고급 스탯 분석 포함 (예시)
 def get_fbref_stats(player_name):
@@ -20,20 +21,27 @@ def get_fbref_stats(player_name):
     }
     return stats
 
-# 2. @st.cache 사용하여 캐싱된 영상 분석 함수 - OpenCV를 사용한 움직임 분석
+# 2. 캐싱된 영상 분석 함수 - 단계별로 진행하는 동기 처리로 비동기 효과를 구현
 @st.cache
-def analyze_video_for_movement(video_file_path, player_number):
+def analyze_video_for_movement(video_file_path, player_number, frame_step):
     # OpenCV로 임시 파일 열기
     cap = cv2.VideoCapture(video_file_path)
     
     if not cap.isOpened():
         return None, "비디오 파일을 열 수 없습니다."
 
+    # 총 프레임 수 확인
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    
     # 선수 움직임 추적을 위한 경로
     movement_path = []
 
+    # 진행 바 설정
+    progress_bar = st.progress(0)
+
     # 프레임마다 분석
-    while cap.isOpened():
+    for frame_num in range(0, total_frames, frame_step):
+        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)  # 특정 프레임으로 이동
         ret, frame = cap.read()
         if not ret:
             break
@@ -48,6 +56,9 @@ def analyze_video_for_movement(video_file_path, player_number):
             cx = int(moments['m10'] / moments['m00'])  # X 좌표
             cy = int(moments['m01'] / moments['m00'])  # Y 좌표
             movement_path.append((cx, cy))  # 추적 경로 저장
+        
+        # 진행 바 업데이트
+        progress_bar.progress(min((frame_num + frame_step) / total_frames, 1.0))
     
     cap.release()
 
@@ -68,7 +79,7 @@ def analyze_video_for_movement(video_file_path, player_number):
     else:
         return None, "움직임 경로를 감지하지 못했습니다."
 
-# 3. PDF 보고서 생성 함수
+# 3. PDF 보고서 생성 함수 - PDF 생성만 따로 분리해서 처리
 def generate_report(final_score, player_stats, video_analysis, movement_image_path):
     st.write("보고서 생성 중...")
     
@@ -99,7 +110,7 @@ def generate_report(final_score, player_stats, video_analysis, movement_image_pa
     
     return pdf_file_path
 
-# 4. Streamlit UI 구성
+# 4. Streamlit UI 구성 - 작업을 단계별로 분리하여 처리
 def main():
     st.title("축구 분석 애플리케이션")
 
@@ -120,21 +131,23 @@ def main():
         
         if video_file:
             player_number = st.number_input("분석할 선수 번호를 입력하세요", min_value=1, step=1)
+
+            frame_step = st.slider("프레임 간격 (클수록 처리 속도 향상)", 1, 30, 10)
             
             if st.button("선수 번호로 분석"):
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_video:
                     temp_video.write(video_file.read())
                     video_file_path = temp_video.name
 
-                # 캐시된 함수 사용
-                movement_image_path, error = analyze_video_for_movement(video_file_path, player_number)
+                # 1단계: 비디오 분석 작업
+                movement_image_path, error = analyze_video_for_movement(video_file_path, player_number, frame_step)
 
                 if error:
                     st.error(error)
                 elif movement_image_path:
                     st.image(movement_image_path, caption=f"선수 {player_number}의 움직임 경로")
 
-                    # PDF 보고서 생성 및 다운로드
+                    # 2단계: PDF 보고서 생성 및 다운로드
                     if st.button("PDF 보고서 생성 및 다운로드"):
                         video_analysis = f"선수 번호 {player_number}의 움직임이 분석되었습니다."
                         pdf_file_path = generate_report(final_score, fbref_stats, video_analysis, movement_image_path)
