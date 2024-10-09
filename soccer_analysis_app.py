@@ -1,177 +1,226 @@
-import streamlit as st
-import tempfile
 import cv2
-import matplotlib.pyplot as plt
-from fpdf import FPDF
+import mediapipe as mp
 import numpy as np
-import requests
-from bs4 import BeautifulSoup
+import tempfile
+from fpdf import FPDF
+import streamlit as st
 
-# 1. FBref 크롤링 함수 - 타임아웃 설정 및 캐시 적용
-@st.cache_data
-def get_fbref_stats(player_name):
-    try:
-        # 타임아웃 10초 설정
-        url = f"https://fbref.com/en/search/search.fcgi?search={player_name}"
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
+# MediaPipe 포즈 추정 모델 불러오기
+mp_pose = mp.solutions.pose
+pose = mp_pose.Pose()
 
-        # BeautifulSoup으로 HTML 파싱
-        soup = BeautifulSoup(response.text, 'html.parser')
+# 포즈 각도 계산 함수 (팔, 다리 각도 계산에 사용)
+def calculate_angle(a, b, c):
+    a = np.array(a)
+    b = np.array(b)
+    c = np.array(c)
+    radians = np.arctan2(c[1] - b[1], c[0] - b[0]) - np.arctan2(a[1] - b[1], a[0] - b[0])
+    angle = np.abs(radians * 180.0 / np.pi)
+    if angle > 180.0:
+        angle = 360 - angle
+    return angle
 
-        # 예시로서 특정 데이터를 추출하여 반환
-        stats = {
-            "골": "12",  
-            "골 기대값(xG)": "9.5",
-            "xG 유효 슛(xGOT)": "7.2",
-            "도움": "8",
-            "Expected Assists (xA)": "6.3",
-            "패스 성공률": "82.5",
-            "전진 패스": "45",
-            "침투 성공률": "65",
-            "주요 침투 구역": "상대 페널티 박스 안, 상대 측면 공간"
-        }
-
-        return stats
-    except requests.exceptions.Timeout:
-        st.error(f"서버 요청 시간이 초과되었습니다. 다시 시도해 주세요.")
-        return None
-    except requests.exceptions.RequestException as e:
-        st.error(f"데이터를 가져오는 중 오류가 발생했습니다: {e}")
-        return None
-
-# 2. 비디오 분석 함수 - 프레임 간격을 설정하여 부하를 줄임
-@st.cache_data
-def analyze_video_for_movement(video_file_path, player_number, frame_step):
-    # OpenCV로 임시 파일 열기
+# 공의 궤적 및 구질 분석 함수
+def track_ball_trajectory(video_file_path):
     cap = cv2.VideoCapture(video_file_path)
-    
     if not cap.isOpened():
         return None, "비디오 파일을 열 수 없습니다."
 
-    # 총 프레임 수 확인
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    
-    # 선수 움직임 추적을 위한 경로
-    movement_path = []
+    ball_trajectory = []
+    previous_position = None
+    speeds = []
 
-    # 진행 바 설정
-    progress_bar = st.progress(0)
-
-    # 프레임마다 분석 (프레임 간격 설정)
-    for frame_num in range(0, total_frames, frame_step):
-        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)  # 특정 프레임으로 이동
+    while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
             break
-        
-        # 움직임 분석 예시: 특정 번호의 선수 추적
+
         gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        _, thresh_frame = cv2.threshold(gray_frame, 200, 255, cv2.THRESH_BINARY)
+        _, thresh = cv2.threshold(gray_frame, 240, 255, cv2.THRESH_BINARY)
+        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        for contour in contours:
+            if cv2.contourArea(contour) > 50:
+                (x, y, w, h) = cv2.boundingRect(contour)
+                ball_position = (int(x + w / 2), int(y + h / 2))
+                ball_trajectory.append(ball_position)
 
-        # 모멘트를 사용하여 객체의 중심(추적 대상) 위치를 찾음
-        moments = cv2.moments(thresh_frame)
-        if moments['m00'] != 0:
-            cx = int(moments['m10'] / moments['m00'])  # X 좌표
-            cy = int(moments['m01'] / moments['m00'])  # Y 좌표
-            movement_path.append((cx, cy))  # 추적 경로 저장
-        
-        # 진행 바 업데이트
-        progress_bar.progress(min((frame_num + frame_step) / total_frames, 1.0))
-    
+                if previous_position is not None:
+                    distance = np.linalg.norm(np.array(ball_position) - np.array(previous_position))
+                    speed = distance
+                    speeds.append(speed)
+                previous_position = ball_position
+
     cap.release()
+    average_speed = np.mean(speeds) if speeds else 0
+    ball_curve = "직선" if average_speed > 10 else "느린 곡선"
 
-    # 추적된 경로 시각화
-    if movement_path:
-        plt.figure(figsize=(6, 4))
-        x_coords, y_coords = zip(*movement_path)
-        plt.plot(x_coords, y_coords, marker='o', color='blue', markersize=5)
-        plt.title(f"선수 {player_number}의 움직임 경로")
-        plt.xlabel("X 좌표")
-        plt.ylabel("Y 좌표")
-        
-        # 이미지 파일로 저장
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmpfile:
-            plt.savefig(tmpfile.name)
-            plt.close()
-            return tmpfile.name, None
-    else:
-        return None, "움직임 경로를 감지하지 못했습니다."
+    return ball_trajectory, average_speed, ball_curve, None
 
-# 3. PDF 보고서 생성 함수
-def generate_report(final_score, player_stats, video_analysis, movement_image_path):
-    st.write("보고서 생성 중...")
+# 선수 움직임, 자세 및 밸런스 분석 함수
+def analyze_player_movements(video_file_path):
+    cap = cv2.VideoCapture(video_file_path)
+    if not cap.isOpened():
+        return None, "비디오 파일을 열 수 없습니다."
 
+    frame_count = 0
+    posture_data = []
+    off_the_ball_movements = []
+    on_the_ball_movements = []
+    balance_data = []
+
+    previous_player_pos = None
+
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        results = pose.process(frame_rgb)
+
+        if results.pose_landmarks:
+            landmarks = results.pose_landmarks.landmark
+
+            left_shoulder = [landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER].x, landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER].y]
+            right_shoulder = [landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER].x, landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER].y]
+            left_hip = [landmarks[mp_pose.PoseLandmark.LEFT_HIP].x, landmarks[mp_pose.PoseLandmark.LEFT_HIP].y]
+            left_knee = [landmarks[mp_pose.PoseLandmark.LEFT_KNEE].x, landmarks[mp_pose.PoseLandmark.LEFT_KNEE].y]
+            left_ankle = [landmarks[mp_pose.PoseLandmark.LEFT_ANKLE].x, landmarks[mp_pose.PoseLandmark.LEFT_ANKLE].y]
+
+            player_pos = np.array(left_shoulder)
+
+            shoulder_angle = calculate_angle(left_hip, left_shoulder, right_shoulder)
+            knee_angle = calculate_angle(left_hip, left_knee, left_ankle)
+
+            balance = abs(shoulder_angle - knee_angle)
+            balance_data.append({
+                'frame': frame_count,
+                'balance': balance
+            })
+
+            if previous_player_pos is not None:
+                player_movement = np.linalg.norm(player_pos - previous_player_pos)
+                if player_movement > 0.05:
+                    off_the_ball_movements.append({
+                        'frame': frame_count,
+                        'event': 'Off-the-ball Movement'
+                    })
+            else:
+                on_the_ball_movements.append({
+                    'frame': frame_count,
+                    'event': 'On-the-ball Movement'
+                })
+
+            posture_data.append({
+                'frame': frame_count,
+                'shoulder_angle': shoulder_angle,
+                'knee_angle': knee_angle
+            })
+
+            previous_player_pos = player_pos
+        frame_count += 1
+
+    cap.release()
+    return {
+        'posture_data': posture_data,
+        'off_the_ball_movements': off_the_ball_movements,
+        'on_the_ball_movements': on_the_ball_movements,
+        'balance_data': balance_data
+    }, None
+
+# PDF 보고서 생성 함수
+def generate_analysis_report(profile_info, analysis_results, ball_analysis):
+    posture_data = analysis_results['posture_data']
+    balance_data = analysis_results['balance_data']
+    off_the_ball_movements = analysis_results['off_the_ball_movements']
+    on_the_ball_movements = analysis_results['on_the_ball_movements']
+    ball_trajectory, average_speed, ball_curve, _ = ball_analysis
+
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+    pdf.cell(200, 10, txt="축구 분석 보고서", ln=True, align='C')
+
+    # 선수 프로필 정보 추가
+    pdf.cell(200, 10, txt="선수 프로필:", ln=True)
+    pdf.cell(200, 10, txt=f"이름: {profile_info['name']}", ln=True)
+    pdf.cell(200, 10, txt=f"포지션: {profile_info['position']}", ln=True)
+    pdf.image(profile_info['image_path'], x=10, y=60, w=40)
+
+    pdf.ln(50)
+
+    # 포즈 분석 데이터 추가
+    pdf.cell(200, 10, txt="포즈 분석:", ln=True)
+    for data in posture_data:
+        pdf.cell(200, 10, txt=f"Frame: {data['frame']}, Shoulder Angle: {data['shoulder_angle']}, Knee Angle: {data['knee_angle']}", ln=True)
+
+    # 밸런스 및 코어 안정성 분석 추가
+    pdf.cell(200, 10, txt="몸의 밸런스 및 코어 안정성 분석:", ln=True)
+    for balance in balance_data:
+        pdf.cell(200, 10, txt=f"Frame: {balance['frame']}, Balance Score: {balance['balance']}", ln=True)
+
+    # 오프더볼/온더볼 움직임 분석 추가
+    pdf.cell(200, 10, txt="오프더볼 움직임:", ln=True)
+    for movement in off_the_ball_movements:
+        pdf.cell(200, 10, txt=f"Frame: {movement['frame']}, Event: {movement['event']}", ln=True)
+
+    pdf.cell(200, 10, txt="온더볼 움직임:", ln=True)
+    for movement in on_the_ball_movements:
+        pdf.cell(200, 10, txt=f"Frame: {movement['frame']}, Event: {movement['event']}", ln=True)
+
+    # 공의 궤적 분석 결과 추가
+    pdf.cell(200, 10, txt="공의 구질과 궤적 분석:", ln=True)
+    pdf.cell(200, 10, txt=f"평균 속도: {average_speed:.2f}, 구질: {ball_curve}", ln=True)
+
+    # PDF 파일 저장
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.set_font("Arial", size=12)
-        pdf.cell(200, 10, txt="축구 분석 보고서", ln=True, align='C')
-        
-        pdf.cell(200, 10, txt=f"선수 종합 점수: {final_score}/100", ln=True)
-        
-        pdf.cell(200, 10, txt="세부 스탯 분석 결과:", ln=True)
-        for key, value in player_stats.items():
-            pdf.cell(200, 10, txt=f"{key}: {value}", ln=True)
-        
-        # 영상 분석 결과 추가
-        pdf.cell(200, 10, txt=video_analysis, ln=True)
+        pdf.output(temp_file.name)
 
-        # 선수 움직임 경로 이미지 추가
-        if movement_image_path:
-            pdf.add_page()
-            pdf.image(movement_image_path, x=10, y=10, w=180)
+    return temp_file.name
 
-        pdf_file_path = temp_file.name
-        pdf.output(pdf_file_path)
-
-    st.success(f"PDF 보고서가 생성되었습니다: {pdf_file_path}")
-    
-    return pdf_file_path
-
-# 4. Streamlit UI 구성 - 작업을 단계별로 분리하여 처리
+# Streamlit 애플리케이션 UI 구성
 def main():
-    st.title("스카우팅 리포트")
+    st.title("축구 선수 분석 애플리케이션")
 
-    st.header("선수 이름 검색")
-    player_name = st.text_input("선수 이름을 입력하세요 (예: 홍길동)")
-    
-    position = st.selectbox("선수 포지션을 선택하세요", ['공격수', '미드필더', '수비수'])
-    
-    if player_name:
-        fbref_stats = get_fbref_stats(player_name)
-        if fbref_stats:
-            final_score = 85  # 예시 점수
-            
-            st.subheader(f"{player_name} 선수의 종합 점수: {final_score}/100")
+    st.header("선수 프로필 입력")
+    player_name = st.text_input("선수 이름을 입력하세요")
+    player_position = st.text_input("선수 포지션을 입력하세요")
+    player_image = st.file_uploader("선수 사진을 업로드하세요", type=["png", "jpg", "jpeg"])
 
-            # 하이라이트 영상 업로드 및 분석
-            st.header("하이라이트 영상 업로드")
-            video_file = st.file_uploader("하이라이트 영상을 업로드하세요 (최대 5GB)", type=["mp4", "avi", "mov"])
-            
-            if video_file:
-                player_number = st.number_input("분석할 선수 번호를 입력하세요", min_value=1, step=1)
+    st.header("선수 영상 업로드")
+    video_file = st.file_uploader("하이라이트 영상을 업로드하세요 (최대 5GB)", type=["mp4", "avi", "mov"])
 
-                frame_step = st.slider("프레임 간격 (클수록 처리 속도 향상)", 1, 30, 10)
-                
-                if st.button("선수 번호로 분석"):
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_video:
-                        temp_video.write(video_file.read())
-                        video_file_path = temp_video.name
+    if video_file and player_image:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_video:
+            temp_video.write(video_file.read())
+            video_file_path = temp_video.name
 
-                    # 1단계: 비디오 분석 작업
-                    movement_image_path, error = analyze_video_for_movement(video_file_path, player_number, frame_step)
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as temp_image:
+            temp_image.write(player_image.read())
+            image_file_path = temp_image.name
 
-                    if error:
-                        st.error(error)
-                    elif movement_image_path:
-                        st.image(movement_image_path, caption=f"선수 {player_number}의 움직임 경로")
+        profile_info = {
+            'name': player_name,
+            'position': player_position,
+            'image_path': image_file_path
+        }
 
-                        # 2단계: PDF 보고서 생성 및 다운로드
-                        if st.button("PDF 보고서 생성 및 다운로드"):
-                            video_analysis = f"선수 번호 {player_number}의 움직임이 분석되었습니다."
-                            pdf_file_path = generate_report(final_score, fbref_stats, video_analysis, movement_image_path)
-                            st.markdown(f'<a href="file://{pdf_file_path}" download>PDF 다운로드</a>', unsafe_allow_html=True)
+        # 선수 움직임, 자세 및 밸런스 분석
+        st.subheader("선수 움직임 분석")
+        analysis_results, error = analyze_player_movements(video_file_path)
+        if error:
+            st.error(error)
+
+        # 공의 궤적 및 구질 분석
+        st.subheader("공의 궤적 분석")
+        ball_analysis, error = track_ball_trajectory(video_file_path)
+        if error:
+            st.error(error)
+
+        # 분석 보고서 생성
+        if st.button("PDF 보고서 생성"):
+            pdf_file_path = generate_analysis_report(profile_info, analysis_results, ball_analysis)
+            st.markdown(f'<a href="file://{pdf_file_path}" download>PDF 다운로드</a>', unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
