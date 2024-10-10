@@ -1,9 +1,18 @@
-from pyvirtualdisplay import Display
 import os
+import subprocess
 
-# Xvfb를 사용하는 가상 디스플레이 설정
-display = Display(visible=0, size=(1024, 768))
-display.start()
+# Xvfb 실행
+def start_xvfb():
+    xvfb_process = subprocess.Popen(['Xvfb', ':1', '-screen', '0', '1024x768x16'])
+    os.environ['DISPLAY'] = ':1'
+    return xvfb_process
+
+# Xvfb 종료
+def stop_xvfb(xvfb_process):
+    xvfb_process.kill()
+
+# Xvfb 시작
+xvfb_process = start_xvfb()
 
 import cv2
 import streamlit as st
@@ -209,5 +218,5 @@ def main():
 if __name__ == "__main__":
     main()
 
-# 가상 디스플레이 종료
-display.stop()
+# Xvfb 종료
+stop_xvfb(xvfb_process)
